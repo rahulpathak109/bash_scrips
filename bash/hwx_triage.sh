@@ -1,7 +1,7 @@
 #!/bin/env bash
 #
 # DOWNLOAD the latest script
-#   curl -O https://raw.githubusercontent.com/hajimeo/samples/master/bash/hwx_triage.sh
+#   curl -O https://raw.githubusercontent.com/rahulpathak109/bash_scrips/master/bash/hwx_triage.sh
 #
 # Collection of functions to triage HDP related issues
 # Tested on CentOS 6.6

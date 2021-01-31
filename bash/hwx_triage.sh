@@ -14,7 +14,7 @@
 [ -z "${g_AMBARI_USER}" ] && g_AMBARI_USER='admin'
 [ -z "${g_AMBARI_PASS}" ] && g_AMBARI_PASS='admin'
 
-_WORK_DIR="./hwx_triage"
+_WORK_DIR="./hwx_triage_$(hostname)_$(date +'%Y%m%d%H%M%S')"
 _PID=""
 _LOG_DIR=""
 _LOG_DAY="1"
@@ -39,6 +39,7 @@ Example 3: Collect Kafka PID related information with Kafka log (for past 1 day)
 
 Available options:
     -p PID     This PID will be checked
+    -s PORT    This port will be checked for connections
     -l PATH    A log directory path
     -d NUM     If -l is given, collect past x days of logs (default 1 day)
     -v         (TODO) Verbose mode
@@ -152,13 +153,13 @@ function f_check_process() {
         # NO heap dump at this moment
         local _pre_cmd=""
         which timeout &>/dev/null && _pre_cmd="timeout 12"
-        [ -x "${_cmd_dir}/jmap" ] && $_pre_cmd sudo -u ${_user} ${_cmd_dir}/jmap -histo ${_p} &> ${_work_dir%/}/jmap_histo_${_p}.out
+        [ -x "${_cmd_dir}/jmap" ] && $_pre_cmd su ${_user} -c "${_cmd_dir}/jmap -histo ${_p}" &> ${_work_dir%/}/jmap_histo_${_p}.out
         # 'ps' with -L (or -T) does not work with -p <pid>, also anyway, same as 'top' COMMAND is truncated.
         #ps -eLo user,pid,lwp,nlwp,ruser,pcpu,stime,etime,comm | grep -w "${_p}" &> ${_work_dir%/}/pseLo_${_p}.out
         top -Hb -n 3 -d 3 -p ${_p} &> ${_work_dir%/}/top_${_p}.out &    # printf "%x\n" [PID]
-        [ -x "${_cmd_dir}/jstack" ] && for i in {1..3};do $_pre_cmd sudo -u ${_user} ${_cmd_dir}/jstack -l ${_p}; sleep 3; done &> ${_work_dir%/}/jstack_${_p}.out &
+        [ -x "${_cmd_dir}/jstack" ] && for i in {1..3};do $_pre_cmd su ${_user} -c '${_cmd_dir}/jstack -l ${_p} > ${_work_dir%/}/jstack_${_p}_${i}.out'; sleep 3; done &
         #$_pre_cmd pstack ${_p} &> ${_work_dir%/}/pstack_${_p}.out &    # if jstack or jstack -F doesn't work
-        [ -x "${_cmd_dir}/jstat" ] && $_pre_cmd sudo -u ${_user} ${_cmd_dir}/jstat -gccause ${_p} 1000 9 &> ${_work_dir%/}/jstat_${_p}.out &
+        [ -x "${_cmd_dir}/jstat" ] && $_pre_cmd su {_user} -c '${_cmd_dir}/jstat -gccause ${_p} 1000 9 &> ${_work_dir%/}/jstat_${_p}.out' &
     fi
 
     pmap -x ${_p} &> ${_work_dir%/}/pmap_${_p}.out
@@ -446,6 +447,13 @@ function _log() {
     fi
 }
 
+f_check_connections() {
+    source_host=`hostname -f`
+    filename=connections_port${_PORT}.out
+    lsof -i @${source_host}:${_PORT}|cut -d'>' -f2|cut -d':' -f1|sort| uniq -c|sort -nrk1|head >$filename
+    ssh -o StrictHostKeyChecking=no `awk '{print $2}' $filename |head -1` "lsof -i @${source_host}:${_PORT}" >from_top_$filename
+}
+
 function _workdir() {
     local _work_dir="${1-$_WORK_DIR}"
 
@@ -491,6 +499,8 @@ if [ "$0" = "$BASH_SOURCE" ]; then
             p)
                 _PID="$OPTARG"
                 ;;
+            s)
+                _PORT="$OPTARG"
             l)
                 _LOG_DIR="$OPTARG"
                 ;;
@@ -526,6 +536,11 @@ if [ "$0" = "$BASH_SOURCE" ]; then
     if [ -n "$_LOG_DIR" ]; then
         f_collect_log_files "$_LOG_DIR" "$_LOG_DAY"
     fi
+    
+    if [ -n "$_PORT" ]; then
+        f_check_connections "$_PORT"
+    fi
+    
     f_tar_work_dir
     echo "INFO" "Completed!" >&2
 fi

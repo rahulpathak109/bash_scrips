@@ -39,6 +39,7 @@ Example 3: Collect Kafka PID related information with Kafka log (for past 1 day)
 
 Available options:
     -p PID     This PID will be checked
+    -s PORT    This port will be checked for connections
     -l PATH    A log directory path
     -d NUM     If -l is given, collect past x days of logs (default 1 day)
     -v         (TODO) Verbose mode
@@ -156,7 +157,7 @@ function f_check_process() {
         # 'ps' with -L (or -T) does not work with -p <pid>, also anyway, same as 'top' COMMAND is truncated.
         #ps -eLo user,pid,lwp,nlwp,ruser,pcpu,stime,etime,comm | grep -w "${_p}" &> ${_work_dir%/}/pseLo_${_p}.out
         top -Hb -n 3 -d 3 -p ${_p} &> ${_work_dir%/}/top_${_p}.out &    # printf "%x\n" [PID]
-        [ -x "${_cmd_dir}/jstack" ] && for i in {1..3};do $_pre_cmd su ${_user} -c '${_cmd_dir}/jstack -l ${_p} > ${_work_dir%/}/jstack_${_p}_${i}.out'; sleep 3; done" &
+        [ -x "${_cmd_dir}/jstack" ] && for i in {1..3};do $_pre_cmd su ${_user} -c '${_cmd_dir}/jstack -l ${_p} > ${_work_dir%/}/jstack_${_p}_${i}.out'; sleep 3; done &
         #$_pre_cmd pstack ${_p} &> ${_work_dir%/}/pstack_${_p}.out &    # if jstack or jstack -F doesn't work
         [ -x "${_cmd_dir}/jstat" ] && $_pre_cmd su {_user} -c '${_cmd_dir}/jstat -gccause ${_p} 1000 9 &> ${_work_dir%/}/jstat_${_p}.out' &
     fi
@@ -448,9 +449,9 @@ function _log() {
 
 f_check_connections() {
     source_host=`hostname -f`
-    filename=connections_port${_PORT}
+    filename=connections_port${_PORT}.out
     lsof -i @${source_host}:${_PORT}|cut -d'>' -f2|cut -d':' -f1|sort| uniq -c|sort -nrk1|head >$filename
-    ssh -o StrictHostKeyChecking=no `awk '{print $2}' $filename |head -1` "lsof -i @${source_host}:${port}" >from_top_$filename
+    ssh -o StrictHostKeyChecking=no `awk '{print $2}' $filename |head -1` "lsof -i @${source_host}:${_PORT}" >from_top_$filename
 }
 
 function _workdir() {
@@ -498,6 +499,8 @@ if [ "$0" = "$BASH_SOURCE" ]; then
             p)
                 _PID="$OPTARG"
                 ;;
+            s)
+                _PORT="$OPTARG"
             l)
                 _LOG_DIR="$OPTARG"
                 ;;
